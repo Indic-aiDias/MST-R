@@ -6,7 +6,7 @@
    2. Combine all the generated files for each sources and split as single files for each split
 2. L2 reranker finetuning.py
    1. Loads a passage reranker model
-   2. Replace regression task head with binary classifcation head (this task head had slightly better results in our experiments)
+   2. Replace regression task head with classifcation head (this task head had slightly better results in our experiments)
    3. Freeze some intial layer to avoid catastrophic forgetting and making training faster
    4. Load datasets, use standard huggingface (HF) trainer class with our metrics for observing training
    5. Send the metrics to mlflow (easily replacable to any other framework HF trainer supports like wadb) for tracking
