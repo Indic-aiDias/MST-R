@@ -10,8 +10,3 @@
    3. Freeze some intial layer to avoid catastrophic forgetting and making training faster
    4. Load datasets, use standard huggingface (HF) trainer class with our metrics for observing training
    5. Send the metrics to mlflow (easily replacable to any other framework HF trainer supports like wadb) for tracking
-3. Reranker Evaluation.py
-   1. trec eval for L2 reranker
-   2. Takes trec file of L1 reranker as input
-   3. Runs inferences for L2 reranker and saves output trec file for reranker
-   4. Evaluates output trec using trec eval
