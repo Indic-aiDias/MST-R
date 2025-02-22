@@ -1,5 +1,6 @@
 # Databricks notebook source
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import torch
 import pandas as pd
 
 from tqdm.autonotebook import tqdm
@@ -86,14 +87,16 @@ ret_df_grouped["GroundTruth"] = ret_df_grouped["QuestionID"].apply(lambda x: tes
 # COMMAND ----------
 
 # Replace MODEL NAME with the hugging face model name you want to use
-# TODO: YASH ADD EVAL FOR OUR RERANKER NOT SOME RANDOM SENTENCE TRANSFORMER
 BATCH_SIZE = 16
-MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-12-v2"
+TOP_K = 20
+MODEL_NAME = "yashmalviya/ms-marco-MiniLM-L-6-v2-3aglo-frozen-binary-classification"
 RUN_NAME = "top{L1_TOP_K}-bge-en-icl-5-shot-single-5-ms-marco-MiniLM-L-12-v2"
 
 # COMMAND ----------
 
-model = CrossEncoder(MODEL_NAME)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME)
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = model.to('cuda').eval()
 
 # COMMAND ----------
 
@@ -101,9 +104,18 @@ trec_ranking_file = f"regnlp/reranking-evals/{RUN_NAME}.trec"
 with open(trec_ranking_file, "w") as f:
     for i, row in tqdm(ret_df_grouped.iterrows(), total=len(ret_df_grouped)):
         all_docs_inst = [p["Passage"] for p in row["Passage"]]
-        top_k_docs = model.rank(row["Question"], all_docs_inst, top_k=20, return_documents=False, batch_size=BATCH_SIZE)
-        for j, hit in enumerate(top_k_docs):
-            line = f"{row['QuestionID']} 0 {row['Passage'][hit['corpus_id']]['ID']} {j+1} 10 {RUN_NAME}"
+        question_list = [row["Question"]] * all_docs_inst
+        tokens = tokenizer(question_list, all_docs_inst,  padding=True, return_tensors='pt')
+        if tokens['input_ids'].shape[1] > 512:
+            tokens = tokenizer(question_list, all_docs_inst, padding='max_length', return_tensors='pt', max_length=512, truncation=True)
+        tokens = tokens.to('cuda')
+        batch_score = (model(**tokens).logits.detach().cpu()).numpy()
+
+        # sort all_docs_inst by batch_score
+        sorted_docs_inst = [x for _, x in sorted(zip(batch_score, row["PassageId"]), key=lambda pair: pair[0], reverse=True)]
+        top_k_docs = sorted_docs_inst[:TOP_K]
+        for j, p_id in enumerate(top_k_docs):
+            line = f"{row['QuestionID']} 0 {row['Passage'][p_id]['ID']} {j+1} 10 {RUN_NAME}"
             f.write(line + "\n")
 
 # COMMAND ----------
